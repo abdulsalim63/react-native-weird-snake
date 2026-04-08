@@ -1,27 +1,37 @@
 import * as React from 'react';
-import { StyleSheet, View, Button, Text, Image, Modal } from 'react-native';
+import { StyleSheet, View, Button, Text, Image, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Colors } from '../styles/colors';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Coordinates, Direction } from '../types/types';
+import { useAudioPlayer } from 'expo-audio';
 import Snake from './Snake';
 import StartModal from './StartModal';
+import Ionicons from '@react-native-vector-icons/ionicons';
 
 const SNAKE_INITIAL_POSITION = [{ x: 5, y: 20 }, { x: 4, y: 20 }, { x: 3, y: 20 }];
 const DEFAULT_MOVE_INTERVAL = 150; // milliseconds
 const DEFAULT_SIZE = 20;
 
 export default function Game(): React.JSX.Element {
+  const boomSound = useAudioPlayer(require('../../assets/explode.mp3'));
   const [isGameStarted, setIsGameStarted] = React.useState(false);
   const [size, setSize] = React.useState(DEFAULT_SIZE);
   const [speed, setSpeed] = React.useState(DEFAULT_MOVE_INTERVAL);
+  const [height, setHeight] = React.useState(10);
+  const [highScore, setHighScore] = React.useState(0);
 
   const [direction, setDirection] = React.useState<Direction>(Direction.Right);
   const [snakePosition, setSnakePosition] = React.useState<Coordinates[]>(SNAKE_INITIAL_POSITION);
-  const [foodPosition, setFoodPosition] = React.useState<Coordinates>({
+  const [foodPositionRef, setFoodPosition] = React.useState<Coordinates>({
     x: Math.floor(Math.random() * 10),
     y: Math.floor(Math.random() * 10)
   });
+
+  const foodPosition = React.useRef(foodPositionRef);
+  React.useEffect(() => {
+    foodPosition.current = foodPositionRef;
+  }, [foodPositionRef]);
 
   const [score, setScore] = React.useState(0);
   const [isPaused, setIsPaused] = React.useState(false);
@@ -56,33 +66,37 @@ export default function Game(): React.JSX.Element {
       }
 
       if (newHead.x < 0) {
-        newHead.x = Math.floor(gameBoundsRef.current.width / size - 1);
-      } else if (newHead.x > gameBoundsRef.current.width / size - 1) {
+        newHead.x = Math.floor(gameBoundsRef.current.width / size - 2);
+      } else if (newHead.x > gameBoundsRef.current.width / size - 2) {
         console.log('hit 1');
         newHead.x = 0;
       }
 
       if (newHead.y < 0) {
-        newHead.y = Math.floor(gameBoundsRef.current.height / size - 16);
-      } else if (newHead.y > gameBoundsRef.current.height / size - 16) {
+        newHead.y = Math.floor(gameBoundsRef.current.height / size - height);
+      } else if (newHead.y > gameBoundsRef.current.height / size - height) {
         console.log('hit 2');
         newHead.y = 0;
       }
 
       if (prev.length > 4 && prev.some(segment => segment.x === newHead.x && segment.y === newHead.y)) {
         setIsGameOver(true);
+        setHighScore(prev => prev < score ? score : prev);
         return prev;
       }
 
       console.log(`New head position: (${newHead.x}, ${newHead.y})`);
-      if (Math.floor(newHead.x) == foodPosition.x && Math.floor(newHead.y) == foodPosition.y) {
+      if ((Math.floor(newHead.x) == foodPosition.current.x && Math.floor(newHead.y) == foodPosition.current.y) ||
+          (score != 0 && score % 50 === 0 && 
+            [foodPosition.current.x, foodPosition.current.x + 1].includes(Math.floor(newHead.x)) &&
+            [foodPosition.current.y, foodPosition.current.y + 1].includes(Math.floor(newHead.y)))) {
         console.log('Food eaten!');
 
         if (direction === Direction.Right) {
           showPopup();
         }
 
-        setScore(prev => prev + 10)
+        setScore(prev => prev != 0 && prev % 50 === 0 ? prev + 30 : prev + 10)
         setFoodPosition(getRandomFoodPosition);
         console.log('New food position: ', foodPosition);
         return [newHead, ...prev];
@@ -120,17 +134,30 @@ export default function Game(): React.JSX.Element {
 
   const showPopup = () => {
       setBombVisible(true);
+      boomSound.play();
       // Auto close after 500ms
       setTimeout(() => {
         setBombVisible(false);
+        boomSound.seekTo(0);
       }, 500);
     };
   
   const getRandomFoodPosition = () => {
-    return {
+    const position = {
       x: Math.floor(Math.random() * gameBoundsRef.current.width / size),
       y: Math.floor(Math.random() * gameBoundsRef.current.height / size)
     }
+    console.log('Generated food position: ', position);
+    if (position.y > Math.floor(gameBoundsRef.current.height / size - height)) {
+      position.y = 5;
+    }
+
+    if (position.x > Math.floor(gameBoundsRef.current.width / size - 2)) {
+      position.x = 5;
+    }
+
+    console.log('Final food position: ', position);
+    return position;
   }
 
   React.useEffect(() => {
@@ -161,36 +188,44 @@ export default function Game(): React.JSX.Element {
             <Modal transparent={true}>
               <View style={styles.modalOverlay}>
               <Text style={styles.gameOverText}>Game Over!</Text>
-              <Button title="Restart" onPress={() => {
-                setSnakePosition(SNAKE_INITIAL_POSITION);
-                setDirection(Direction.Right);
-                setFoodPosition(getRandomFoodPosition);
-                setScore(0);
-                setIsGameOver(false);
-              }} />
+              <Text style={styles.scoreText}>Highest Score: {highScore}</Text>
+              <Pressable style={styles.button} onPress={() => {
+                  setSnakePosition(SNAKE_INITIAL_POSITION);
+                  setDirection(Direction.Right);
+                  setFoodPosition(getRandomFoodPosition);
+                  setScore(0);
+                  setIsGameOver(false);
+              }}>
+                <Text style={[styles.scoreText, {}]}>Restart</Text>
+              </Pressable>
               </View>
             </Modal>}
-          <Button title={isPaused ? "Resume" : "Pause"} onPress={() => setIsPaused(prev => !prev)} />
-          <Button title="Reset" onPress={() => {
+          <Pressable onPress={() => setIsPaused(prev => !prev)}>
+            {isPaused ? <Ionicons name="play" size={24} color={Colors.tertiary}/> : <Ionicons name="pause" size={24} color={Colors.tertiary}/>}
+          </Pressable>
+          <Pressable onPress={() => {
             setSnakePosition(SNAKE_INITIAL_POSITION);
             setDirection(Direction.Right);
             setFoodPosition(getRandomFoodPosition);
             setScore(0);
-          }} />
-          <Button title="Exit" onPress={() => {
+          }}><Ionicons name="refresh" size={24} color={Colors.tertiary}/></Pressable>
+          <Pressable onPress={() => {
             setIsGameStarted(false);
             setSnakePosition(SNAKE_INITIAL_POSITION);
             setDirection(Direction.Right);
             setFoodPosition(getRandomFoodPosition);
             setScore(0);
-          }} />
+          }}>
+            <Ionicons name="close" size={24} color={Colors.tertiary}/>
+          </Pressable>
         </View>
         <View style={styles.boundaries}>
-          {isGameStarted && <Snake snake={snakePosition} food={foodPosition} size={size} />}
-          {!isGameStarted && <StartModal setGameStarted={setIsGameStarted} setSpeed={setSpeed} setSize={setSize} />}
+          {isGameStarted && <Snake snake={snakePosition} food={foodPosition.current} size={size} direction={direction} score={score} />}
+          {!isGameStarted && <StartModal setGameStarted={setIsGameStarted} setSpeed={setSpeed} setSize={setSize} setHeight={setHeight} />}
         </View>
         <Modal transparent={true} visible={bombVisible} animationType="fade">
           <View style={styles.modalOverlay}>
+            <Text style={{ fontSize: 24, fontWeight: 'bold', color: 'red' }}>Death to America!!</Text>
             <Image source={require('../../assets/bomb.png')} style={{ width: 400, height: 400 }} />
           </View>
         </Modal>
@@ -221,7 +256,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   scoreText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: Colors.tertiary,
     textAlign: 'center',
@@ -229,7 +264,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
+    gap: 65,
   },
   modalOverlay: {
     flex: 1,
@@ -237,4 +272,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)', // 50% opacity black background
   },
-})
+  button: {
+    margin: 5,
+    padding: 5,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 5,
+    backgroundColor: 'rgba(0, 166, 255, 0.6)', // 50% opacity white background}
+}})

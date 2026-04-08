@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, Modal, Button, TouchableOpacity } from 'react-n
 import React from 'react'
 import { Colors } from '../styles/colors';
 
-const StartModal = ({setGameStarted, setSpeed, setSize}: any) => {
+const StartModal = ({setGameStarted, setSpeed, setSize, setHeight}: any) => {
   const [preGameSetting, setPreGameSetting] = React.useState(false);
 
   const handleLevelSelect = (level: string) => {
@@ -12,18 +12,21 @@ const StartModal = ({setGameStarted, setSpeed, setSize}: any) => {
         // width -2, height -8
         setSpeed(200);
         setSize(20);
+        setHeight(7)
         break;
       case 'medium':
         // ✅ Set speed and size for medium level
-        // width -1, height -11
+        // width -2, height -11
         setSpeed(120);
-        setSize(15);
+        setSize(14);
+        setHeight(11);
         break;
       case 'hard':
         // ✅ Set speed and size for easy level
         // width -2, height -16
-        setSpeed(50);
+        setSpeed(30);
         setSize(10);
+        setHeight(15);
         break;
     }
     setGameStarted(true);
